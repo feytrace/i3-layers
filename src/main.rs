@@ -28,11 +28,11 @@ fn layout_manager(tx: mpsc::Sender<&'static str>) -> Result<(), Box<dyn std::err
     let mut listener = I3EventListener::connect()?;
     listener.subscribe(&[Subscription::Window])?;
 
-    let mut vertical = false;
+    let mut vertical = true;
 
     for event in listener.listen() {
         if let Event::WindowEvent(e) = event? {
-            if e.change == WindowChange::New {
+            if e.change == WindowChange::New || e.change == WindowChange::Close {
                 vertical = !vertical;
 
                 let cmd = if vertical {
