@@ -1,0 +1,9 @@
+[package]
+name = "i3-layers"
+version = "0.1.0"
+edition = "2024"
+description = "i3 ipc layered integration, with optional window management"
+licence = "MIT"
+
+[dependencies]
+i3ipc = { version = "0.10.1" }
