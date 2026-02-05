@@ -1,57 +1,57 @@
-use i3ipc::{
-    event::{inner::WindowChange, Event},
-    I3Connection, I3EventListener, Subscription,
-};
+use i3ipc::event::inner::{WindowChange, WorkspaceChange};
+use i3ipc::event::Event;
+use i3ipc::{I3Connection, I3EventListener, Subscription};
+use std::{collections::HashMap, sync::mpsc, thread};
 
-use std::{
-    sync::mpsc,
-    thread,
-};
-
-fn main() {
-    let (tx, rx) = mpsc::channel::<&'static str>();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (tx, rx) = mpsc::channel::<String>();
 
     thread::spawn(move || {
         let mut conn = I3Connection::connect().expect("Failed to connect to i3");
-
         for cmd in rx {
-            if let Err(e) = conn.run_command(cmd) {
+            if let Err(e) = conn.run_command(&cmd) {
                 eprintln!("i3 command failed: {:?}", e);
             }
         }
     });
 
-    layout_manager(tx).expect("Layer manager failed");
-}
-
-fn layout_manager(tx: mpsc::Sender<&'static str>) -> Result<(), Box<dyn std::error::Error>> {
     let mut listener = I3EventListener::connect()?;
-    listener.subscribe(&[Subscription::{Window, Workspace}])?;
+    listener.subscribe(&[Subscription::Window, Subscription::Workspace])?;
 
-    let mut workspace_state: HashMap<name: Option<String>, is_vertical: bool> = HashMap::new();
+    let mut next_split: HashMap<Option<String>, bool> = HashMap::new();
     let mut maybe_current_workspace: Option<String> = Some("1".to_string());
 
     for event in listener.listen() {
-        if let Event::WindowEvent(e) = event? {
-            if e.change == WindowChange::New || e.change == WindowChange::Close {
-                workspace_state.entry(maybe_current_workspace).and_modify(|is_vertical| *is_vertical = *!is_vertical)
-                let cmd = if workspace_state.entry(maybe_current_workspace) {
-                    "split v"
-                } else {
-                    "split h"
-                };
+        let event = event?;
+        match event {
+            Event::WindowEvent(e) => {
+                if e.change == WindowChange::New {
+                    let is_vertical = next_split
+                        .entry(maybe_current_workspace.clone())
+                        .or_insert(false);
 
-                tx.send(cmd)?;
+                    let cmd = if *is_vertical { "split v" } else { "split h" };
+                    tx.send(cmd.to_string())?;
+
+                    *is_vertical = !*is_vertical;
+                }
             }
-        }
-        if let Event::WorkspaceEvent(e) = event? {
-           if e.change == WorkspaceChange::Focus {
-                maybe_current_workspace = WorkspaceEvent::current();
-           } 
-           if e.change == WorkspaceChange::Move {
-                maybe_current_workspace = WorkspaceEvent::current();
-                workspace_state.entry(maybe_current_workspace).and_modify(|is_vertical| *is_vertical = *!is_vertical)
-           }
+
+            Event::WorkspaceEvent(e) => match e.change {
+                WorkspaceChange::Focus => {
+                    maybe_current_workspace = e.current.as_ref().and_then(|ws| ws.name.clone());
+                }
+                WorkspaceChange::Move => {
+                    maybe_current_workspace = e.current.as_ref().and_then(|ws| ws.name.clone());
+
+                    next_split
+                        .entry(maybe_current_workspace.clone())
+                        .or_insert(false);
+                }
+                _ => {}
+            },
+
+            _ => {}
         }
     }
 
